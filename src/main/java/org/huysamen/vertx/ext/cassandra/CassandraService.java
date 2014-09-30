@@ -47,15 +47,15 @@ public interface CassandraService {
     /**
      * Test that the current Cassandra service is operational. Useful for simple database health checking.
      *
-     * @param resultHandler - The asynchronous callback handler.
+     * @param resultHandler The asynchronous callback handler.
      */
     public void test(final Handler<AsyncResult<String>> resultHandler);
 
     /**
      * Executes a raw statement against the Cassandra cluster.
      *
-     * @param statement - The raw CQL statement to execute.
-     * @param resultHandler - The asynchronous callback handler.
+     * @param statement The raw CQL statement to execute.
+     * @param resultHandler The asynchronous callback handler.
      */
     public void executeRaw(final String statement, final Handler<AsyncResult<JsonObject>> resultHandler);
 }

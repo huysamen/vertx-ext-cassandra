@@ -6,7 +6,8 @@ import org.huysamen.vertx.ext.cassandra.CassandraService;
 import org.huysamen.vertx.ext.cassandra.CassandraServiceFactory;
 
 /**
- * Implementation of the Cassandra service factory contract.
+ * Implementation of the Cassandra service factory {@link org.huysamen.vertx.ext.cassandra.CassandraServiceFactory}
+ * contract.
  *
  * @author <a href="http://nico.huysamen.org">Nicolaas Frederick Huysamen</a>
  * @since 1.0
