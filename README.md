@@ -4,7 +4,7 @@ vertx-ext-cassandra
 ### Apache Cassandra integration for Vert.x 3.x
 
 ### Intro
-This extension provides functionality to access a Cassandra database with Vert.x 3.x using a Verticle Service Factory. The code is heavily burrowed from the folks at [englishtown](https://github.com/englishtown/vertx-mod-cassandra) and [nea](https://github.com/nea/vertx-mod-cassandra-persistor), as they both have done awesome work for Vert.x 2.x.
+This extension provides functionality to access a Cassandra database with Vert.x 3.x using a Verticle Service Factory. The code is heavily borrowed from the folks at [englishtown](https://github.com/englishtown/vertx-mod-cassandra) and [nea](https://github.com/nea/vertx-mod-cassandra-persistor), as they both have done awesome work for Vert.x 2.x.
 
 ### Configuration
 The configuration follows mostly from **vertx-mod-cassandra** from *englishtown*, with elements from *nea*. The following options are available:
