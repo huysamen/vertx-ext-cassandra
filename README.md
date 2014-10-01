@@ -83,7 +83,7 @@ A sample config looks like:
 ```
 
 ### Overriding with Environment Variables
-This is not yet supported in **ext-cassandra***.
+This is not yet supported in **ext-cassandra**.
     
 ### Defaults
 If there is no configuration, neither JSON nor environment variables, the module will default to looking for cassandra at 127.0.0.1 with the Cassandra driver defaults for everything.

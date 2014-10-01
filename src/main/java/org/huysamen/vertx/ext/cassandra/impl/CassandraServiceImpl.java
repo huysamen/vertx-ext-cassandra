@@ -5,6 +5,7 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.vertx.core.*;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.huysamen.vertx.ext.cassandra.CassandraService;
 import org.huysamen.vertx.ext.cassandra.conf.CassandraConfiguration;
@@ -22,6 +23,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * @version 1.0
  */
 public class CassandraServiceImpl implements CassandraService {
+
+    private static final int PROTOCOL_VERSION = 2;
 
     private final Vertx vertx;
     private final Map<String, PreparedStatement> statementRegistry = new ConcurrentHashMap<>();
@@ -145,7 +148,19 @@ public class CassandraServiceImpl implements CassandraService {
 
     @Override
     public void execute(final String query, final Handler<AsyncResult<JsonObject>> handler) {
+        final ResultSetFuture future = session.executeAsync(new SimpleStatement(query));
 
+        Futures.addCallback(future, new FutureCallback<ResultSet>() {
+            @Override
+            public void onSuccess(final ResultSet resultSet) {
+                handler.handle(createAsyncResult(resultSetAsJson(resultSet)));
+            }
+
+            @Override
+            public void onFailure(final Throwable throwable) {
+                handler.handle(createAsyncResult(throwable));
+            }
+        });
     }
 
     @Override
@@ -171,21 +186,20 @@ public class CassandraServiceImpl implements CassandraService {
 
     @Override
     public void prepared(final JsonObject statement, final Handler<AsyncResult<JsonObject>> handler) {
-        final String name = statement.getString("name");
-
-        if (name == null) {
-            handler.handle(createAsyncResult(simpleResult("No name specified")));
-            return;
-        }
-
-        if (!statementRegistry.containsKey(name)) {
-            handler.handle(createAsyncResult(simpleResult("No named statement matching name found")));
-            return;
-        }
-
-        final PreparedStatement preparedStatement = statementRegistry.get(name);
-
-
+        // TODO
+//        final String name = statement.getString("name");
+//
+//        if (name == null) {
+//            handler.handle(createAsyncResult(simpleResult("No name specified")));
+//            return;
+//        }
+//
+//        if (!statementRegistry.containsKey(name)) {
+//            handler.handle(createAsyncResult(simpleResult("No named statement matching name found")));
+//            return;
+//        }
+//
+//        final PreparedStatement preparedStatement = statementRegistry.get(name);
     }
 
     private AsyncResult<JsonObject> createAsyncResult(final JsonObject result) {
@@ -240,5 +254,43 @@ public class CassandraServiceImpl implements CassandraService {
         final JsonObject message = new JsonObject();
         message.putString("result", result);
         return message;
+    }
+
+    private JsonObject resultSetAsJson(final ResultSet resultSet) {
+        final JsonObject result = new JsonObject();
+        final JsonArray rows = new JsonArray();
+
+        result.putString("result", "OK");
+        result.putNumber("count", resultSet.getAvailableWithoutFetching());
+        result.putArray("rows", rows);
+
+        int i = 1;
+        for (final Row row : resultSet) {
+            final ColumnDefinitions columnDefinitions = row.getColumnDefinitions();
+            final JsonObject rowObject = new JsonObject();
+            final JsonArray rowValues = new JsonArray();
+
+            rowObject.putNumber("row", i++);
+            rowObject.putArray("values", rowValues);
+
+            for (int d = 0; d < columnDefinitions.size(); d++) {
+                if (row.isNull(d)) {
+                    continue;
+                }
+
+                final JsonObject column = new JsonObject();
+                final Object value = columnDefinitions.getType(d).deserialize(row.getBytesUnsafe(d), PROTOCOL_VERSION);
+
+                column.putString("column", columnDefinitions.getName(d));
+                column.putString("type", columnDefinitions.getType(d).getName().name());
+                column.putValue("value", value);
+
+                rowValues.add(column);
+            }
+
+            rows.add(rowObject);
+        }
+
+        return result;
     }
 }
