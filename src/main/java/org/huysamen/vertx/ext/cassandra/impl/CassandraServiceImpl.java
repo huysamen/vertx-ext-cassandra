@@ -1,22 +1,18 @@
 package org.huysamen.vertx.ext.cassandra.impl;
 
 import com.datastax.driver.core.*;
-import com.datastax.driver.core.policies.*;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
-import io.vertx.core.AsyncResult;
-import io.vertx.core.Future;
-import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
-import io.vertx.core.json.JsonArray;
+import com.google.common.util.concurrent.ListenableFuture;
+import io.vertx.core.*;
 import io.vertx.core.json.JsonObject;
-import io.vertx.core.logging.Logger;
-import io.vertx.core.logging.impl.LoggerFactory;
 import org.huysamen.vertx.ext.cassandra.CassandraService;
 import org.huysamen.vertx.ext.cassandra.conf.CassandraConfiguration;
 import org.huysamen.vertx.ext.cassandra.conf.impl.JsonCassandraConfigurationImpl;
 
-import java.util.stream.IntStream;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Implementation of the Cassandra service {@link org.huysamen.vertx.ext.cassandra.CassandraService} contract.
@@ -27,102 +23,222 @@ import java.util.stream.IntStream;
  */
 public class CassandraServiceImpl implements CassandraService {
 
-    private static final Logger LOG = LoggerFactory.getLogger(CassandraServiceImpl.class);
-    private static final int PROTOCOL_VERSION = 2;
-
     private final Vertx vertx;
-    private final JsonObject config;
+    private final Map<String, PreparedStatement> statementRegistry = new ConcurrentHashMap<>();
 
     protected Cluster cluster;
     protected Session session;
     protected Metrics metrics;
-    protected CassandraConfiguration cassandraConfiguration;
+    protected CassandraConfiguration config;
 
     public CassandraServiceImpl(final Vertx vertx, final JsonObject config) {
         this.vertx = vertx;
-        this.config = config;
+        this.config = new JsonCassandraConfigurationImpl(config);
+        this.metrics = new Metrics(this);
+    }
+
+    protected Cluster getCluster() {
+        return cluster;
+    }
+
+    protected CassandraConfiguration getConfig() {
+        return config;
+    }
+
+    protected boolean isClosed() {
+        return session.isClosed();
     }
 
     @Override
     public void start() {
-        cassandraConfiguration = new JsonCassandraConfigurationImpl(config);
+        final Cluster.Builder clusterBuilder = new Cluster.Builder();
+
+        // Get array of IPs, default to localhost
+        final List<String> seeds = config.getSeeds();
+
+        if (seeds == null || seeds.isEmpty()) {
+            throw new RuntimeException("Cassandra seeds are missing");
+        }
+
+        // Add cassandra cluster contact points
+        seeds.forEach(clusterBuilder::addContactPoint);
+
+        // Add policies to cluster builder
+        if (config.getLoadBalancingPolicy() != null) {
+            clusterBuilder.withLoadBalancingPolicy(config.getLoadBalancingPolicy());
+        }
+
+        if (config.getReconnectionPolicy() != null) {
+            clusterBuilder.withReconnectionPolicy(config.getReconnectionPolicy());
+        }
+
+        // Add pooling options to cluster builder
+        if (config.getPoolingOptions() != null) {
+            clusterBuilder.withPoolingOptions(config.getPoolingOptions());
+        }
+
+        // Add socket options to cluster builder
+        if (config.getSocketOptions() != null) {
+            clusterBuilder.withSocketOptions(config.getSocketOptions());
+        }
+
+        if (config.getQueryOptions() != null) {
+            clusterBuilder.withQueryOptions(config.getQueryOptions());
+        }
+
+        if (config.getMetricsOptions() != null) {
+            if (!config.getMetricsOptions().isJMXReportingEnabled()) {
+                clusterBuilder.withoutJMXReporting();
+            }
+        }
+
+        if (config.getAuthProvider() != null) {
+            clusterBuilder.withAuthProvider(config.getAuthProvider());
+        }
+
+        // Build cluster and connect
+        cluster = clusterBuilder.build();
+        reconnect();
     }
 
     @Override
     public void stop() {
-        cluster.close();
-    }
+        if (metrics != null) {
+            metrics.close();
+            metrics = null;
+        }
 
-    @Override
-    public void test(final Handler<AsyncResult<String>> resultHandler) {
-        if (cluster != null && !cluster.isClosed()) {
-            resultHandler.handle(Future.completedFuture("OK"));
-        } else {
-            resultHandler.handle(Future.completedFuture("BAD"));
+        if (cluster != null) {
+            cluster.closeAsync().force();
+            cluster = null;
+            session = null;
         }
     }
 
     @Override
-    public void executeRaw(final String query, final Handler<AsyncResult<JsonObject>> resultHandler) {
-//        final Statement statement = new SimpleStatement(query);
-//        final ResultSetFuture futureResult = session.executeAsync(statement);
-//
-//        Futures.addCallback(futureResult, new FutureCallback<ResultSet>() {
-//            @Override
-//            public void onSuccess(final ResultSet rows) {
-//                if (rows.getAvailableWithoutFetching() <= 0) {
-//                    resultHandler.handle(Future.completedFuture(resultOk()));
-//                } else {
-//                    resultHandler.handle(Future.completedFuture(resultToJson(rows)));
-//                }
-//            }
-//
-//            @Override
-//            public void onFailure(final Throwable throwable) {
-//                resultHandler.handle(Future.completedFuture(throwable));
-//            }
-//        });
+    public void reconnect() {
+        final Session staleSession = session;
+
+        session = cluster.connect();
+
+        if (staleSession != null) {
+            staleSession.closeAsync();
+        }
+
+        metrics.afterReconnect();
     }
 
-//    private JsonObject resultOk() {
-//        final JsonObject result = new JsonObject();
-//
-//        result.putString("result", "OK");
-//
-//        return result;
-//    }
-//
-//    private JsonObject resultToJson(final ResultSet results) {
-//        final JsonObject resultMessage = new JsonObject();
-//        final JsonArray resultRows = new JsonArray();
-//
-//        resultMessage.putString("result", "OK");
-//        resultMessage.putNumber("count", results.getAvailableWithoutFetching());
-//
-//        results.all()
-//                .stream()
-//                .forEach((row) -> {
-//                    final JsonArray resultRowColumns = new JsonArray();
-//                    final ColumnDefinitions columns = row.getColumnDefinitions();
-//
-//                    IntStream.range(0, columns.size())
-//                            .filter((idx) -> !row.isNull(idx))
-//                            .forEach((idx) -> {
-//                                final JsonObject value = new JsonObject();
-//
-//                                value.putString("keyspace", columns.getKeyspace(idx));
-//                                value.putString("column", columns.getName(idx));
-//                                value.putString("type", columns.getType(idx).toString());
-//                                value.putValue("value", columns.getType(idx).deserialize(row.getBytesUnsafe(idx), PROTOCOL_VERSION));
-//
-//                                resultRowColumns.add(value);
-//                            });
-//
-//                    resultRows.add(resultRowColumns);
-//                });
-//
-//        resultMessage.putArray("values", resultRows);
-//
-//        return resultMessage;
-//    }
+    @Override
+    public void metrics(final Handler<AsyncResult<JsonObject>> handler) {
+        if (metrics == null) {
+            handler.handle(createAsyncResult(simpleResult("No metrics registered")));
+            return;
+        }
+
+        if (cluster != null && !cluster.isClosed()) {
+            // TODO: Serialize metrics for manual checks
+            handler.handle(createAsyncResult(simpleResult("OK: TODO")));
+        } else {
+            handler.handle(createAsyncResult(simpleResult("Cluster closed")));
+        }
+    }
+
+    @Override
+    public void execute(final String query, final Handler<AsyncResult<JsonObject>> handler) {
+
+    }
+
+    @Override
+    public void prepare(final String name, final String statement, final Handler<AsyncResult<JsonObject>> handler) {
+        final ListenableFuture<PreparedStatement> future = session.prepareAsync(statement);
+
+        Futures.addCallback(future, new FutureCallback<PreparedStatement>() {
+            @Override
+            public void onSuccess(final PreparedStatement preparedStatement) {
+                if (statementRegistry.put(name, preparedStatement) == null) {
+                    handler.handle(createAsyncResult(simpleResult("Added")));
+                } else {
+                    handler.handle(createAsyncResult(simpleResult("Updated")));
+                }
+            }
+
+            @Override
+            public void onFailure(final Throwable throwable) {
+                handler.handle(createAsyncResult(throwable));
+            }
+        });
+    }
+
+    @Override
+    public void prepared(final JsonObject statement, final Handler<AsyncResult<JsonObject>> handler) {
+        final String name = statement.getString("name");
+
+        if (name == null) {
+            handler.handle(createAsyncResult(simpleResult("No name specified")));
+            return;
+        }
+
+        if (!statementRegistry.containsKey(name)) {
+            handler.handle(createAsyncResult(simpleResult("No named statement matching name found")));
+            return;
+        }
+
+        final PreparedStatement preparedStatement = statementRegistry.get(name);
+
+
+    }
+
+    private AsyncResult<JsonObject> createAsyncResult(final JsonObject result) {
+        return new AsyncResult<JsonObject>() {
+            @Override
+            public JsonObject result() {
+                return result;
+            }
+
+            @Override
+            public Throwable cause() {
+                return null;
+            }
+
+            @Override
+            public boolean succeeded() {
+                return true;
+            }
+
+            @Override
+            public boolean failed() {
+                return false;
+            }
+        };
+    }
+
+    private AsyncResult<JsonObject> createAsyncResult(final Throwable error) {
+        return new AsyncResult<JsonObject>() {
+            @Override
+            public JsonObject result() {
+                return null;
+            }
+
+            @Override
+            public Throwable cause() {
+                return error;
+            }
+
+            @Override
+            public boolean succeeded() {
+                return false;
+            }
+
+            @Override
+            public boolean failed() {
+                return true;
+            }
+        };
+    }
+
+    private JsonObject simpleResult(final String result) {
+        final JsonObject message = new JsonObject();
+        message.putString("result", result);
+        return message;
+    }
 }

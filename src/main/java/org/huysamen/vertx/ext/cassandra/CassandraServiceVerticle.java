@@ -21,7 +21,6 @@ public class CassandraServiceVerticle extends AbstractVerticle {
         service = CassandraService.create(vertx, config);
         service.start();
 
-        vertx.eventBus()
-                .registerService(service, config.getString("vertx.cassandra", "org.huysamen.vertx.ext.cassandra"));
+        vertx.eventBus().registerService(service, config.getString("vertx.cassandra", "org.huysamen.vertx.ext.cassandra"));
     }
 }
