@@ -1,6 +1,7 @@
 package org.huysamen.vertx.ext.cassandra.impl;
 
 import com.datastax.driver.core.*;
+import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -11,6 +12,8 @@ import org.huysamen.vertx.ext.cassandra.CassandraService;
 import org.huysamen.vertx.ext.cassandra.conf.CassandraConfiguration;
 import org.huysamen.vertx.ext.cassandra.conf.impl.JsonCassandraConfigurationImpl;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -134,15 +137,15 @@ public class CassandraServiceImpl implements CassandraService {
     @Override
     public void metrics(final Handler<AsyncResult<JsonObject>> handler) {
         if (metrics == null) {
-            handler.handle(createAsyncResult(simpleResult("No metrics registered")));
+            handler.handle(createAsyncResult(simpleResult("OK", "No metrics registered")));
             return;
         }
 
         if (cluster != null && !cluster.isClosed()) {
             // TODO: Serialize metrics for manual checks
-            handler.handle(createAsyncResult(simpleResult("OK: TODO")));
+            handler.handle(createAsyncResult(simpleResult("OK", "TODO")));
         } else {
-            handler.handle(createAsyncResult(simpleResult("Cluster closed")));
+            handler.handle(createAsyncResult(simpleResult("BAD", "Cluster closed")));
         }
     }
 
@@ -171,9 +174,9 @@ public class CassandraServiceImpl implements CassandraService {
             @Override
             public void onSuccess(final PreparedStatement preparedStatement) {
                 if (statementRegistry.put(name, preparedStatement) == null) {
-                    handler.handle(createAsyncResult(simpleResult("Added")));
+                    handler.handle(createAsyncResult(simpleResult("OK", "Added")));
                 } else {
-                    handler.handle(createAsyncResult(simpleResult("Updated")));
+                    handler.handle(createAsyncResult(simpleResult("OK", "Updated")));
                 }
             }
 
@@ -186,20 +189,56 @@ public class CassandraServiceImpl implements CassandraService {
 
     @Override
     public void prepared(final JsonObject statement, final Handler<AsyncResult<JsonObject>> handler) {
-        // TODO
-//        final String name = statement.getString("name");
-//
-//        if (name == null) {
-//            handler.handle(createAsyncResult(simpleResult("No name specified")));
-//            return;
-//        }
-//
-//        if (!statementRegistry.containsKey(name)) {
-//            handler.handle(createAsyncResult(simpleResult("No named statement matching name found")));
-//            return;
-//        }
-//
-//        final PreparedStatement preparedStatement = statementRegistry.get(name);
+        final String name = statement.getString("name");
+
+        if (name == null || name.length() == 0) {
+            handler.handle(createAsyncResult(simpleResult("BAD", "No name specified")));
+            return;
+        }
+
+        if (!statementRegistry.containsKey(name)) {
+            handler.handle(createAsyncResult(simpleResult("BAD", "No prepared statement matching name found")));
+            return;
+        }
+
+        final PreparedStatement preparedStatement = statementRegistry.get(name);
+        final BatchStatement query = new BatchStatement();
+        final JsonArray valuesList = statement.getArray("values", new JsonArray());
+
+        if (preparedStatement.getQueryString().toLowerCase().startsWith("select") && valuesList.size() > 1) {
+            handler.handle(createAsyncResult(simpleResult("BAD", "Batched SELECT statements are not supported (yet)")));
+            return;
+        }
+
+        if (valuesList.size() > 0) {
+            for (int i = 0; i < valuesList.size(); i++) {
+                final JsonArray values = valuesList.get(i);
+
+                if (values != null && values.size() > 0) {
+                    query.add(preparedStatement.bind(values.toArray()));
+                }
+            }
+        }
+
+        final ResultSetFuture future;
+
+        if (preparedStatement.getQueryString().toLowerCase().startsWith("select")) {
+            future = session.executeAsync(Iterables.get(query.getStatements(), 0));
+        } else {
+            future = session.executeAsync(query);
+        }
+
+        Futures.addCallback(future, new FutureCallback<ResultSet>() {
+            @Override
+            public void onSuccess(final ResultSet resultSet) {
+                handler.handle(createAsyncResult(resultSetAsJson(resultSet)));
+            }
+
+            @Override
+            public void onFailure(final Throwable throwable) {
+                handler.handle(createAsyncResult(throwable));
+            }
+        });
     }
 
     private AsyncResult<JsonObject> createAsyncResult(final JsonObject result) {
@@ -250,10 +289,13 @@ public class CassandraServiceImpl implements CassandraService {
         };
     }
 
-    private JsonObject simpleResult(final String result) {
-        final JsonObject message = new JsonObject();
-        message.putString("result", result);
-        return message;
+    private JsonObject simpleResult(final String result, final String message) {
+        final JsonObject response = new JsonObject();
+
+        response.putString("result", result);
+        response.putString("message", message);
+
+        return response;
     }
 
     private JsonObject resultSetAsJson(final ResultSet resultSet) {
