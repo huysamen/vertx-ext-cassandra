@@ -258,37 +258,38 @@ public class CassandraServiceImpl implements CassandraService {
 
     private JsonObject resultSetAsJson(final ResultSet resultSet) {
         final JsonObject result = new JsonObject();
-        final JsonArray rows = new JsonArray();
+        final JsonArray columnObjects = new JsonArray();
+        final JsonArray rowObjects = new JsonArray();
 
         result.putString("result", "OK");
         result.putNumber("count", resultSet.getAvailableWithoutFetching());
-        result.putArray("rows", rows);
+        result.putArray("columns", columnObjects);
+        result.putArray("rows", rowObjects);
 
-        int i = 1;
+        int r = 0;
         for (final Row row : resultSet) {
             final ColumnDefinitions columnDefinitions = row.getColumnDefinitions();
-            final JsonObject rowObject = new JsonObject();
-            final JsonArray rowValues = new JsonArray();
+            final JsonArray rowObject = new JsonArray();
 
-            rowObject.putNumber("row", i++);
-            rowObject.putArray("values", rowValues);
-
-            for (int d = 0; d < columnDefinitions.size(); d++) {
-                if (row.isNull(d)) {
+            for (int i = 0; i < columnDefinitions.size(); i++) {
+                if (row.isNull(i)) {
                     continue;
                 }
 
                 final JsonObject column = new JsonObject();
-                final Object value = columnDefinitions.getType(d).deserialize(row.getBytesUnsafe(d), PROTOCOL_VERSION);
+                final Object value = columnDefinitions.getType(i).deserialize(row.getBytesUnsafe(i), PROTOCOL_VERSION);
 
-                column.putString("column", columnDefinitions.getName(d));
-                column.putString("type", columnDefinitions.getType(d).getName().name());
-                column.putValue("value", value);
+                rowObject.add(value);
 
-                rowValues.add(column);
+                if (r == 0) {
+                    column.putString("name", columnDefinitions.getName(i));
+                    column.putString("type", columnDefinitions.getType(i).getName().name());
+                    columnObjects.add(column);
+                }
             }
 
-            rows.add(rowObject);
+            rowObjects.add(rowObject);
+            r++;
         }
 
         return result;
