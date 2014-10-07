@@ -10,7 +10,7 @@ import com.datastax.driver.core.policies.ReconnectionPolicy;
 import com.datastax.driver.core.policies.RetryPolicy;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import org.huysamen.vertx.ext.cassandra.conf.CassandraConfiguration;
+import org.huysamen.vertx.ext.cassandra.config.CassandraConfiguration;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
