@@ -1,4 +1,4 @@
-package org.huysamen.vertx.ext.cassandra.conf;
+package org.huysamen.vertx.ext.cassandra.config;
 
 import com.datastax.driver.core.*;
 import com.datastax.driver.core.policies.LoadBalancingPolicy;

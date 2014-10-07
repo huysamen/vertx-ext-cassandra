@@ -9,11 +9,9 @@ import io.vertx.core.*;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.huysamen.vertx.ext.cassandra.CassandraService;
-import org.huysamen.vertx.ext.cassandra.conf.CassandraConfiguration;
-import org.huysamen.vertx.ext.cassandra.conf.impl.JsonCassandraConfigurationImpl;
+import org.huysamen.vertx.ext.cassandra.config.CassandraConfiguration;
+import org.huysamen.vertx.ext.cassandra.config.impl.JsonCassandraConfigurationImpl;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;

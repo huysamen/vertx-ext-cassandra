@@ -1,18 +1,18 @@
-package org.huysamen.vertx.ext.cassandra.conf.impl;
+package org.huysamen.vertx.ext.cassandra.config.impl;
 
 import com.datastax.driver.core.*;
 import com.datastax.driver.core.policies.*;
 import com.google.common.base.Strings;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import org.huysamen.vertx.ext.cassandra.conf.CassandraConfiguration;
+import org.huysamen.vertx.ext.cassandra.config.CassandraConfiguration;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Implementation of the Cassandra Configuration {@link org.huysamen.vertx.ext.cassandra.conf.CassandraConfiguration}
+ * Implementation of the Cassandra Configuration {@link org.huysamen.vertx.ext.cassandra.config.CassandraConfiguration}
  * contract.
  *
  * @author <a href="http://nico.huysamen.org">Nicolaas Frederick Huysamen</a>
